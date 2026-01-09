@@ -264,9 +264,72 @@
             background: rgba(255, 255, 255, 0.03);
             border-radius: 8px;
         }
+
+        /* 移动端音频启动提示 */
+        #audio-prompt {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(10, 10, 15, 0.95);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+            cursor: pointer;
+            transition: opacity 0.5s ease;
+        }
+
+        #audio-prompt.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        #audio-prompt h2 {
+            font-size: 28px;
+            margin-bottom: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        #audio-prompt p {
+            font-size: 16px;
+            color: rgba(255, 255, 255, 0.7);
+            margin-bottom: 30px;
+            text-align: center;
+            max-width: 80%;
+            line-height: 1.6;
+        }
+
+        #audio-prompt .tap-icon {
+            font-size: 60px;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                transform: scale(1);
+                opacity: 0.5;
+            }
+            50% {
+                transform: scale(1.1);
+                opacity: 1;
+            }
+        }
     </style>
 </head>
 <body>
+    <!-- 移动端音频启动提示 -->
+    <div id="audio-prompt">
+        <div class="tap-icon">👆</div>
+        <h2>点击任意位置开始</h2>
+        <p>点击屏幕以启用音频体验<br>Tap anywhere to enable audio</p>
+    </div>
+
     <div id="canvas-container"></div>
 
     <div id="toggle-controls">⚙️</div>
@@ -385,10 +448,21 @@
                 this.reverbNode = null;
             }
 
-            init() {
-                if (this.initialized) return;
+            async init() {
+                if (this.initialized) {
+                    // 如果已初始化，尝试恢复AudioContext（移动端需要）
+                    if (this.ctx && this.ctx.state === 'suspended') {
+                        await this.ctx.resume();
+                    }
+                    return;
+                }
                 try {
                     this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+
+                    // 移动端必须由用户手势触发resume
+                    if (this.ctx.state === 'suspended') {
+                        await this.ctx.resume();
+                    }
 
                     // 主音量控制
                     this.masterGain = this.ctx.createGain();
@@ -399,8 +473,9 @@
                     this.createReverb();
 
                     this.initialized = true;
+                    console.log('AudioContext initialized:', this.ctx.state);
                 } catch (e) {
-                    console.log('Web Audio API not supported');
+                    console.log('Web Audio API not supported:', e);
                 }
             }
 
@@ -463,8 +538,11 @@
             }
 
             // 更逼真的爆炸声
-            playExplosion(size = 1) {
-                if (!this.initialized || !params.soundEnabled || !this.ctx) return;
+            async playExplosion(size = 1) {
+                // 确保音频上下文已初始化并恢复
+                await this.init();
+
+                if (!params.soundEnabled || !this.ctx) return;
 
                 const t = this.ctx.currentTime;
                 const volume = params.volume * size;
@@ -551,8 +629,11 @@
             }
 
             // 更逼真的烟花上升声（简洁的"嗖"声）
-            playLaunch() {
-                if (!this.initialized || !params.soundEnabled || !this.ctx) return;
+            async playLaunch() {
+                // 确保音频上下文已初始化并恢复
+                await this.init();
+
+                if (!params.soundEnabled || !this.ctx) return;
 
                 const t = this.ctx.currentTime;
                 const volume = params.volume * 0.15;
@@ -603,8 +684,11 @@
             }
 
             // 更逼真的小型爆炸（多重爆炸）
-            playMiniExplosion() {
-                if (!this.initialized || !params.soundEnabled || !this.ctx) return;
+            async playMiniExplosion() {
+                // 确保音频上下文已初始化并恢复
+                await this.init();
+
+                if (!params.soundEnabled || !this.ctx) return;
 
                 const t = this.ctx.currentTime;
                 const volume = params.volume * 0.35;
@@ -886,10 +970,6 @@
         // 烟花类
         class Firework {
             constructor(x, targetY) {
-                // 初始化音频系统
-                audioManager.init();
-                audioManager.playLaunch();
-
                 this.pos = createVector(x, height);
                 this.targetY = targetY;
                 this.vel = createVector(0, random(-12, -8));
@@ -899,6 +979,9 @@
 
                 // 上升轨迹
                 this.trail = [];
+
+                // 异步播放发射音效（不阻塞）
+                audioManager.playLaunch();
             }
 
             applyForce(force) {
@@ -987,6 +1070,20 @@
         }
 
         function setupUI() {
+            // 移动端音频初始化提示
+            const audioPrompt = document.getElementById('audio-prompt');
+            const initAudioOnInteraction = async () => {
+                await audioManager.init();
+                audioPrompt.classList.add('hidden');
+                // 移除事件监听，避免重复触发
+                document.removeEventListener('touchstart', initAudioOnInteraction);
+                document.removeEventListener('click', initAudioOnInteraction);
+            };
+
+            // 监听首次触摸或点击事件
+            document.addEventListener('touchstart', initAudioOnInteraction, { once: true });
+            document.addEventListener('click', initAudioOnInteraction, { once: true });
+
             // 模式选择
             const modeSelect = document.getElementById('mode-select');
             const modeInfo = document.getElementById('mode-info');
@@ -1055,8 +1152,8 @@
             const muteBtn = document.getElementById('mute-btn');
             const volumeSlider = document.getElementById('volume-slider');
 
-            muteBtn.addEventListener('click', () => {
-                audioManager.init();  // 确保音频上下文已初始化
+            muteBtn.addEventListener('click', async () => {
+                await audioManager.init();  // 确保音频上下文已初始化
                 params.soundEnabled = !params.soundEnabled;
                 muteBtn.textContent = params.soundEnabled ? '🔊 开启音效' : '🔇 静音';
             });
