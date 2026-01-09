@@ -1,0 +1,1152 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transient Radiance - 双模式烟花生成器</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: #0a0a0f;
+            color: #fff;
+            overflow: hidden;
+        }
+
+        #canvas-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        #controls {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: rgba(10, 10, 20, 0.85);
+            padding: 25px;
+            border-radius: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            z-index: 100;
+            width: 320px;
+            max-height: calc(100vh - 40px);
+            overflow-y: auto;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            transition: transform 0.3s ease, opacity 0.3s ease;
+        }
+
+        #controls.hidden {
+            transform: translateX(-380px);
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        #toggle-controls {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            width: 45px;
+            height: 45px;
+            background: rgba(10, 10, 20, 0.85);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
+            z-index: 101;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            transition: all 0.3s;
+        }
+
+        #toggle-controls:hover {
+            background: rgba(102, 126, 234, 0.3);
+            border-color: rgba(102, 126, 234, 0.5);
+            transform: scale(1.05);
+        }
+
+        #toggle-controls.shifted {
+            left: 360px;
+        }
+
+        #controls::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        #controls::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 3px;
+        }
+
+        #controls::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 3px;
+        }
+
+        h1 {
+            font-size: 24px;
+            margin-bottom: 8px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.5);
+            margin-bottom: 20px;
+        }
+
+        .control-group {
+            margin-bottom: 18px;
+        }
+
+        .control-group label {
+            display: block;
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.8);
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        .control-group label .value {
+            float: right;
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: rgba(255, 255, 255, 0.1);
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            cursor: pointer;
+            box-shadow: 0 2px 10px rgba(102, 126, 234, 0.4);
+            transition: transform 0.2s;
+        }
+
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+        }
+
+        select {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            color: #fff;
+            font-size: 13px;
+            cursor: pointer;
+            outline: none;
+            transition: all 0.3s;
+        }
+
+        select:hover, select:focus {
+            border-color: #667eea;
+            background: rgba(102, 126, 234, 0.1);
+        }
+
+        select option {
+            background: #1a1a2e;
+            color: #fff;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        button {
+            flex: 1;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        #launch-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        #launch-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+        }
+
+        #launch-btn:active {
+            transform: translateY(0);
+        }
+
+        #clear-btn {
+            background: rgba(255, 255, 255, 0.1);
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        #clear-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .mode-indicator {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 12px 20px;
+            background: rgba(10, 10, 20, 0.85);
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            z-index: 100;
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .mode-indicator .mode {
+            display: block;
+            font-size: 18px;
+            font-weight: 700;
+            margin-top: 5px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .stats {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.4);
+        }
+
+        .stats div {
+            margin-bottom: 5px;
+        }
+
+        .info-text {
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.4);
+            line-height: 1.6;
+            margin-top: 15px;
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+
+    <div id="toggle-controls">⚙️</div>
+
+    <div id="controls">
+        <h1>🎆 Transient Radiance</h1>
+        <p class="subtitle">瞬时璀璨 - 双模式烟花生成器</p>
+
+        <div class="control-group">
+            <label>风格模式 / Style Mode</label>
+            <select id="mode-select">
+                <option value="physics">🌍 物理现实主义</option>
+                <option value="artistic">✨ 表现艺术自由</option>
+            </select>
+        </div>
+
+        <div class="control-group">
+            <label>色彩方案 / Color Palette</label>
+            <select id="color-select">
+                <option value="rainbow">🌈 绚烂彩虹</option>
+                <option value="fire">🔥 火焰烈焰</option>
+                <option value="ice">❄️ 冰雪寒霜</option>
+                <option value="gold">👑 黄金荣耀</option>
+                <option value="neon">💎 霓虹赛博</option>
+                <option value="sunset">🌅 日落晚霞</option>
+            </select>
+        </div>
+
+        <div class="control-group">
+            <label>发射数量 / Count <span class="value" id="count-value">5</span></label>
+            <input type="range" id="count-slider" min="1" max="15" value="5">
+        </div>
+
+        <div class="control-group">
+            <label>粒子密度 / Density <span class="value" id="density-value">150</span></label>
+            <input type="range" id="density-slider" min="50" max="300" value="150">
+        </div>
+
+        <div class="control-group">
+            <label>重力强度 / Gravity <span class="value" id="gravity-value">0.15</span></label>
+            <input type="range" id="gravity-slider" min="-0.3" max="0.5" step="0.01" value="0.15">
+        </div>
+
+        <div class="control-group">
+            <label>空气阻力 / Drag <span class="value" id="drag-value">0.98</span></label>
+            <input type="range" id="drag-slider" min="0.9" max="1.02" step="0.001" value="0.98">
+        </div>
+
+        <div class="control-group">
+            <label>拖尾长度 / Trail <span class="value" id="trail-value">0.15</span></label>
+            <input type="range" id="trail-slider" min="0.05" max="0.4" step="0.01" value="0.15">
+        </div>
+
+        <div class="control-group">
+            <label>多重爆炸概率 / Multi-Burst <span class="value" id="multi-value">30%</span></label>
+            <input type="range" id="multi-slider" min="0" max="100" value="30">
+        </div>
+
+        <div class="control-group">
+            <label>爆炸力度 / Force <span class="value" id="force-value">8</span></label>
+            <input type="range" id="force-slider" min="3" max="15" step="0.5" value="8">
+        </div>
+
+        <div class="control-group">
+            <label>音效设置 / Sound</label>
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <button id="mute-btn" style="flex: 1; padding: 8px; font-size: 12px;">🔊 开启音效</button>
+                <input type="range" id="volume-slider" min="0" max="100" value="50" style="flex: 1;">
+            </div>
+        </div>
+
+        <div class="button-group">
+            <button id="launch-btn">🚀 发射烟花</button>
+            <button id="clear-btn">清除画布</button>
+        </div>
+
+        <div class="info-text" id="mode-info">
+            <strong>物理现实主义：</strong>遵循经典力学定律，粒子受重力影响自然下落，形成真实的抛物线轨迹。适合追求物理可信度的视觉效果。
+        </div>
+
+        <div class="stats">
+            <div>活跃粒子: <span id="particle-count">0</span></div>
+            <div>活跃烟花: <span id="firework-count">0</span></div>
+            <div>当前种子: <span id="seed-display">-</span></div>
+        </div>
+    </div>
+
+    <div class="mode-indicator">
+        当前模式
+        <span class="mode" id="current-mode">物理现实主义</span>
+    </div>
+
+    <script>
+        // 全局参数 - 对应算法哲学
+        let params = {
+            mode: 'physics',  // 'physics' 或 'artistic'
+            colorScheme: 'rainbow',
+            fireworkCount: 5,
+            particleDensity: 150,
+            gravity: 0.15,
+            drag: 0.98,
+            trailFade: 0.15,
+            multiBurstProb: 0.3,
+            explosionForce: 8,
+            seed: Math.floor(Math.random() * 100000),
+            soundEnabled: true,
+            volume: 0.5
+        };
+
+        // 音频系统 - 使用Web Audio API实时生成更逼真的声音
+        class AudioManager {
+            constructor() {
+                this.ctx = null;
+                this.initialized = false;
+                this.masterGain = null;
+                this.reverbNode = null;
+            }
+
+            init() {
+                if (this.initialized) return;
+                try {
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+
+                    // 主音量控制
+                    this.masterGain = this.ctx.createGain();
+                    this.masterGain.gain.value = params.volume;
+                    this.masterGain.connect(this.ctx.destination);
+
+                    // 创建混响效果（模拟户外空间回声）
+                    this.createReverb();
+
+                    this.initialized = true;
+                } catch (e) {
+                    console.log('Web Audio API not supported');
+                }
+            }
+
+            // 创建混响效果
+            createReverb() {
+                const convolver = this.ctx.createConvolver();
+                const rate = this.ctx.sampleRate;
+                const length = rate * 2; // 2秒混响
+                const impulse = this.ctx.createBuffer(2, length, rate);
+                const left = impulse.getChannelData(0);
+                const right = impulse.getChannelData(1);
+
+                for (let i = 0; i < length; i++) {
+                    const decay = Math.exp(-3 * i / length);
+                    left[i] = (Math.random() * 2 - 1) * decay;
+                    right[i] = (Math.random() * 2 - 1) * decay;
+                }
+
+                convolver.buffer = impulse;
+                this.reverbNode = convolver;
+            }
+
+            // 创建噪声buffer
+            createNoiseBuffer(duration = 2) {
+                if (!this.ctx) return null;
+                const bufferSize = this.ctx.sampleRate * duration;
+                const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const data = buffer.getChannelData(0);
+
+                for (let i = 0; i < bufferSize; i++) {
+                    // 使用更平滑的噪声
+                    data[i] = (Math.random() * 2 - 1) * 0.5;
+                }
+                return buffer;
+            }
+
+            // 创建粉红噪声（更有质感）
+            createPinkNoiseBuffer(duration = 2) {
+                if (!this.ctx) return null;
+                const bufferSize = this.ctx.sampleRate * duration;
+                const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const data = buffer.getChannelData(0);
+
+                let b0, b1, b2, b3, b4, b5, b6;
+                b0 = b1 = b2 = b3 = b4 = b5 = b6 = 0.0;
+
+                for (let i = 0; i < bufferSize; i++) {
+                    const white = Math.random() * 2 - 1;
+                    b0 = 0.99886 * b0 + white * 0.0555179;
+                    b1 = 0.99332 * b1 + white * 0.0750759;
+                    b2 = 0.96900 * b2 + white * 0.1538520;
+                    b3 = 0.86650 * b3 + white * 0.3104856;
+                    b4 = 0.55000 * b4 + white * 0.5329522;
+                    b5 = -0.7616 * b5 - white * 0.0168980;
+                    data[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.11;
+                    b6 = white * 0.115926;
+                }
+
+                return buffer;
+            }
+
+            // 更逼真的爆炸声
+            playExplosion(size = 1) {
+                if (!this.initialized || !params.soundEnabled || !this.ctx) return;
+
+                const t = this.ctx.currentTime;
+                const volume = params.volume * size;
+
+                // 创建主增益节点
+                const mainGain = this.ctx.createGain();
+                mainGain.connect(this.masterGain);
+                mainGain.connect(this.reverbNode);
+                this.reverbNode.connect(this.masterGain);
+
+                // ============ 第1层：低频冲击（爆炸的核心轰鸣）============
+                const subBass = this.ctx.createOscillator();
+                subBass.type = 'sine';
+                subBass.frequency.setValueAtTime(150, t);
+                subBass.frequency.exponentialRampToValueAtTime(40, t + 0.4);
+
+                const subGain = this.ctx.createGain();
+                // 快速冲击后缓慢衰减
+                subGain.gain.setValueAtTime(0, t);
+                subGain.gain.linearRampToValueAtTime(volume * 0.8, t + 0.01);
+                subGain.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
+
+                subBass.connect(subGain);
+                subGain.connect(mainGain);
+                subBass.start(t);
+                subBass.stop(t + 0.6);
+
+                // ============ 第2层：中低频爆炸声（主体爆炸）============
+                const explosionNoise = this.ctx.createBufferSource();
+                explosionNoise.buffer = this.createPinkNoiseBuffer(1.5);
+
+                const midFilter = this.ctx.createBiquadFilter();
+                midFilter.type = 'bandpass';
+                midFilter.frequency.setValueAtTime(800, t);
+                midFilter.frequency.exponentialRampToValueAtTime(200, t + 0.5);
+                midFilter.Q.setValueAtTime(0.5, t);
+
+                const midGain = this.ctx.createGain();
+                midGain.gain.setValueAtTime(0, t);
+                midGain.gain.linearRampToValueAtTime(volume * 0.6, t + 0.02);
+                midGain.gain.exponentialRampToValueAtTime(0.001, t + 1.0);
+
+                explosionNoise.connect(midFilter);
+                midFilter.connect(midGain);
+                midGain.connect(mainGain);
+                explosionNoise.start(t);
+                explosionNoise.stop(t + 1.0);
+
+                // ============ 第3层：高频碎裂声（火花飞溅）============
+                const crackleNoise = this.ctx.createBufferSource();
+                crackleNoise.buffer = this.createNoiseBuffer(0.8);
+
+                const highFilter = this.ctx.createBiquadFilter();
+                highFilter.type = 'highpass';
+                highFilter.frequency.setValueAtTime(3000, t);
+                highFilter.Q.setValueAtTime(2, t);
+
+                const highGain = this.ctx.createGain();
+                highGain.gain.setValueAtTime(0, t);
+                highGain.gain.linearRampToValueAtTime(volume * 0.15, t + 0.01);
+                highGain.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+
+                crackleNoise.connect(highFilter);
+                highFilter.connect(highGain);
+                highGain.connect(mainGain);
+                crackleNoise.start(t);
+                crackleNoise.stop(t + 0.4);
+
+                // ============ 第4层：超低频震动（爆炸的余波）============
+                const rumble = this.ctx.createOscillator();
+                rumble.type = 'sine';
+                rumble.frequency.setValueAtTime(60, t);
+                rumble.frequency.linearRampToValueAtTime(30, t + 0.8);
+
+                const rumbleGain = this.ctx.createGain();
+                rumbleGain.gain.setValueAtTime(0, t);
+                rumbleGain.gain.linearRampToValueAtTime(volume * 0.3, t + 0.05);
+                rumbleGain.gain.exponentialRampToValueAtTime(0.001, t + 1.2);
+
+                rumble.connect(rumbleGain);
+                rumbleGain.connect(mainGain);
+                rumble.start(t);
+                rumble.stop(t + 1.2);
+            }
+
+            // 更逼真的烟花上升声（简洁的"嗖"声）
+            playLaunch() {
+                if (!this.initialized || !params.soundEnabled || !this.ctx) return;
+
+                const t = this.ctx.currentTime;
+                const volume = params.volume * 0.15;
+
+                // 主音量包络
+                const mainGain = this.ctx.createGain();
+                mainGain.connect(this.masterGain);
+                mainGain.connect(this.reverbNode);
+                this.reverbNode.connect(this.masterGain);
+
+                // ============ 主啸叫声（简单的频率上升）============
+                const osc = this.ctx.createOscillator();
+                osc.type = 'sine';
+                // 频率从低到高，模拟上升
+                osc.frequency.setValueAtTime(400, t);
+                osc.frequency.exponentialRampToValueAtTime(1500, t + 0.7);
+
+                const oscGain = this.ctx.createGain();
+                // 淡入淡出
+                oscGain.gain.setValueAtTime(0, t);
+                oscGain.gain.linearRampToValueAtTime(volume * 0.5, t + 0.1);
+                oscGain.gain.linearRampToValueAtTime(0, t + 0.7);
+
+                osc.connect(oscGain);
+                oscGain.connect(mainGain);
+                osc.start(t);
+                osc.stop(t + 0.7);
+
+                // ============ 空气嘶嘶声 ============
+                const noise = this.ctx.createBufferSource();
+                noise.buffer = this.createNoiseBuffer(0.7);
+
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'highpass';
+                filter.frequency.setValueAtTime(2000, t);
+                filter.frequency.exponentialRampToValueAtTime(5000, t + 0.6);
+                filter.Q.setValueAtTime(1, t);
+
+                const noiseGain = this.ctx.createGain();
+                noiseGain.gain.setValueAtTime(volume * 0.08, t);
+                noiseGain.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
+
+                noise.connect(filter);
+                filter.connect(noiseGain);
+                noiseGain.connect(mainGain);
+                noise.start(t);
+                noise.stop(t + 0.6);
+            }
+
+            // 更逼真的小型爆炸（多重爆炸）
+            playMiniExplosion() {
+                if (!this.initialized || !params.soundEnabled || !this.ctx) return;
+
+                const t = this.ctx.currentTime;
+                const volume = params.volume * 0.35;
+
+                const mainGain = this.ctx.createGain();
+                mainGain.connect(this.masterGain);
+                mainGain.connect(this.reverbNode);
+                this.reverbNode.connect(this.masterGain);
+
+                // 低频
+                const subOsc = this.ctx.createOscillator();
+                subOsc.type = 'sine';
+                subOsc.frequency.setValueAtTime(200, t);
+                subOsc.frequency.exponentialRampToValueAtTime(80, t + 0.2);
+
+                const subGain = this.ctx.createGain();
+                subGain.gain.setValueAtTime(volume * 0.5, t);
+                subGain.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+
+                subOsc.connect(subGain);
+                subGain.connect(mainGain);
+                subOsc.start(t);
+                subOsc.stop(t + 0.25);
+
+                // 爆炸噪声
+                const noise = this.ctx.createBufferSource();
+                noise.buffer = this.createPinkNoiseBuffer(0.5);
+
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'bandpass';
+                filter.frequency.setValueAtTime(1200, t);
+                filter.frequency.exponentialRampToValueAtTime(300, t + 0.25);
+                filter.Q.setValueAtTime(1, t);
+
+                const noiseGain = this.ctx.createGain();
+                noiseGain.gain.setValueAtTime(volume * 0.4, t);
+                noiseGain.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+
+                noise.connect(filter);
+                filter.connect(noiseGain);
+                noiseGain.connect(mainGain);
+                noise.start(t);
+                noise.stop(t + 0.3);
+            }
+
+            // 更新主音量
+            setVolume(value) {
+                if (this.masterGain) {
+                    this.masterGain.gain.setValueAtTime(
+                        value,
+                        this.ctx.currentTime
+                    );
+                }
+            }
+        }
+
+        const audioManager = new AudioManager();
+
+        // 色彩方案定义
+        const colorSchemes = {
+            rainbow: {
+                name: '绚烂彩虹',
+                getGradient: (t) => {
+                    // t 从 0 到 1，代表能量等级
+                    const hues = [0, 30, 60, 120, 180, 240, 280, 320];
+                    const hue = hues[Math.floor(t * (hues.length - 1))];
+                    return `hsl(${hue}, 100%, ${50 + t * 30}%)`;
+                }
+            },
+            fire: {
+                name: '火焰烈焰',
+                getGradient: (t) => {
+                    // 从白到黄到橙到红
+                    const r = 255;
+                    const g = Math.floor(200 + t * 55);
+                    const b = Math.floor(t * 100);
+                    const a = 0.3 + t * 0.7;
+                    return `rgba(${r}, ${g}, ${b}, ${a})`;
+                }
+            },
+            ice: {
+                name: '冰雪寒霜',
+                getGradient: (t) => {
+                    const r = Math.floor(t * 150);
+                    const g = Math.floor(150 + t * 105);
+                    const b = 255;
+                    const a = 0.3 + t * 0.7;
+                    return `rgba(${r}, ${g}, ${b}, ${a})`;
+                }
+            },
+            gold: {
+                name: '黄金荣耀',
+                getGradient: (t) => {
+                    const r = 255;
+                    const g = Math.floor(180 + t * 75);
+                    const b = Math.floor(t * 100);
+                    const a = 0.4 + t * 0.6;
+                    return `rgba(${r}, ${g}, ${b}, ${a})`;
+                }
+            },
+            neon: {
+                name: '霓虹赛博',
+                getGradient: (t) => {
+                    const hues = [300, 180, 60];  // 紫青黄
+                    const hue = hues[Math.floor(t * 2.99)];
+                    return `hsl(${hue}, 100%, ${50 + t * 30}%)`;
+                }
+            },
+            sunset: {
+                name: '日落晚霞',
+                getGradient: (t) => {
+                    const r = 255;
+                    const g = Math.floor(100 + t * 100);
+                    const b = Math.floor(50 + t * 150);
+                    const a = 0.3 + t * 0.7;
+                    return `rgba(${r}, ${g}, ${b}, ${a})`;
+                }
+            }
+        };
+
+        let fireworks = [];
+        let particles = [];
+        let canvas;
+
+        // 设置随机种子
+        function setSeed(s) {
+            params.seed = s;
+            randomSeed(s);
+            noiseSeed(s);
+        }
+
+        // 粒子类 - 核心算法单元
+        class Particle {
+            constructor(x, y, color, force) {
+                this.pos = createVector(x, y);
+                this.vel = p5.Vector.random2D().mult(force * random(0.5, 1.5));
+                this.acc = createVector(0, 0);
+
+                // 艺术模式下可能向上
+                if (params.mode === 'artistic' && random() < 0.3) {
+                    this.vel.y *= -0.5;  // 部分粒子向上
+                }
+
+                this.color = color;
+                this.life = 1.0;
+                this.decay = random(0.005, 0.02);
+
+                // 速度历史（用于渲染流线轨迹）
+                this.history = [];
+                this.maxHistory = 5;
+
+                // 多重爆炸标记
+                this.canMultiBurst = random() < params.multiBurstProb;
+                this.hasMultiBurst = false;
+            }
+
+            applyForce(force) {
+                this.acc.add(force);
+            }
+
+            // 基于速度计算能量等级（0-1）
+            getEnergyLevel() {
+                const speed = this.vel.mag();
+                const maxSpeed = params.explosionForce * 2;
+                return constrain(speed / maxSpeed, 0, 1);
+            }
+
+            // 动态颜色计算 - 基于速度和生命
+            getDynamicColor() {
+                const energy = this.getEnergyLevel();
+                const lifeFactor = this.life;
+
+                const scheme = colorSchemes[params.colorScheme];
+                let baseColor = scheme.getGradient(energy);
+
+                // 叠加生命期透明度
+                if (baseColor.startsWith('hsl')) {
+                    baseColor = baseColor.replace(')', `, ${this.life * 0.8})`).replace('hsl', 'hsla');
+                } else {
+                    baseColor = baseColor.replace(/,[^,]+\)$/, `,${this.life * 0.8})`);
+                }
+
+                return baseColor;
+            }
+
+            update() {
+                // 应用重力
+                let gravity = createVector(0, params.gravity);
+
+                // 艺术模式下的物理变奏
+                if (params.mode === 'artistic') {
+                    // 随机扰动（模拟空气湍流）
+                    if (random() < 0.1) {
+                        gravity.x += random(-0.02, 0.02);
+                    }
+                    // 低速粒子可能向上漂浮
+                    if (this.vel.mag() < 1 && random() < 0.02) {
+                        gravity.y = -0.05;
+                    }
+                }
+
+                this.applyForce(gravity);
+
+                this.vel.add(this.acc);
+                this.vel.mult(params.drag);
+                this.pos.add(this.vel);
+                this.acc.mult(0);
+
+                // 记录轨迹历史
+                this.history.push(this.pos.copy());
+                if (this.history.length > this.maxHistory) {
+                    this.history.shift();
+                }
+
+                this.life -= this.decay;
+
+                // 多重爆炸检测
+                if (this.canMultiBurst && !this.hasMultiBurst &&
+                    this.life < 0.5 && this.vel.mag() < 2) {
+                    this.hasMultiBurst = true;
+                    this.multiBurst();
+                }
+            }
+
+            multiBurst() {
+                // 播放小型爆炸音效
+                audioManager.playMiniExplosion();
+
+                // 二次爆炸
+                const burstCount = Math.floor(random(10, 20));
+                const burstForce = params.explosionForce * 0.4;
+
+                for (let i = 0; i < burstCount; i++) {
+                    const p = new Particle(this.pos.x, this.pos.y, this.color, burstForce);
+                    p.life = 0.5;  // 二次粒子寿命更短
+                    p.canMultiBurst = false;  // 不再继续爆炸
+                    particles.push(p);
+                }
+            }
+
+            display() {
+                const dynamicColor = this.getDynamicColor();
+
+                // 绘制流线轨迹（基于历史位置）
+                if (this.history.length > 1) {
+                    noFill();
+                    strokeWeight(2);
+                    stroke(dynamicColor);
+
+                    beginShape();
+                    for (let i = 0; i < this.history.length; i++) {
+                        const alpha = (i / this.history.length) * this.life;
+                        const pos = this.history[i];
+                        vertex(pos.x, pos.y);
+                    }
+                    vertex(this.pos.x, this.pos.y);
+                    endShape();
+                }
+
+                // 绘制粒子主体
+                noStroke();
+                fill(dynamicColor);
+
+                const size = this.life * (params.mode === 'artistic' ? 4 : 3);
+                circle(this.pos.x, this.pos.y, size);
+
+                // 高能粒子发光效果
+                if (this.getEnergyLevel() > 0.5) {
+                    fill(dynamicColor);
+                    circle(this.pos.x, this.pos.y, size * 2);
+                }
+            }
+
+            isDead() {
+                return this.life <= 0;
+            }
+        }
+
+        // 烟花类
+        class Firework {
+            constructor(x, targetY) {
+                // 初始化音频系统
+                audioManager.init();
+                audioManager.playLaunch();
+
+                this.pos = createVector(x, height);
+                this.targetY = targetY;
+                this.vel = createVector(0, random(-12, -8));
+                this.acc = createVector(0, 0);
+                this.exploded = false;
+                this.color = color(random(255), random(255), random(255));
+
+                // 上升轨迹
+                this.trail = [];
+            }
+
+            applyForce(force) {
+                this.acc.add(force);
+            }
+
+            update() {
+                // 上升阶段
+                if (!this.exploded) {
+                    this.applyForce(createVector(0, 0.2));  // 重力
+                    this.vel.add(this.acc);
+                    this.pos.add(this.vel);
+                    this.acc.mult(0);
+
+                    // 记录上升轨迹
+                    this.trail.push(this.pos.copy());
+                    if (this.trail.length > 10) {
+                        this.trail.shift();
+                    }
+
+                    // 到达目标高度或速度减慢时爆炸
+                    if (this.pos.y <= this.targetY || this.vel.y >= 0) {
+                        this.explode();
+                    }
+                }
+            }
+
+            explode() {
+                this.exploded = true;
+
+                // 播放爆炸音效（根据粒子密度调整音量）
+                const size = params.particleDensity / 150;
+                audioManager.playExplosion(size);
+
+                // 创建爆炸粒子
+                const count = params.particleDensity;
+                for (let i = 0; i < count; i++) {
+                    const p = new Particle(
+                        this.pos.x,
+                        this.pos.y,
+                        this.color,
+                        params.explosionForce
+                    );
+                    particles.push(p);
+                }
+            }
+
+            display() {
+                if (!this.exploded) {
+                    // 绘制上升轨迹
+                    if (this.trail.length > 1) {
+                        stroke(255, 200);
+                        strokeWeight(2);
+                        noFill();
+                        beginShape();
+                        for (let pos of this.trail) {
+                            vertex(pos.x, pos.y);
+                        }
+                        vertex(this.pos.x, this.pos.y);
+                        endShape();
+                    }
+
+                    // 绘制火箭头部
+                    noStroke();
+                    fill(255, 255, 200);
+                    circle(this.pos.x, this.pos.y, 4);
+                }
+            }
+
+            isDead() {
+                return this.exploded;
+            }
+        }
+
+        function setup() {
+            canvas = createCanvas(windowWidth, windowHeight);
+            canvas.parent('canvas-container');
+
+            // 初始化种子
+            setSeed(params.seed);
+
+            // 设置UI
+            setupUI();
+
+            background(10, 10, 15);
+        }
+
+        function setupUI() {
+            // 模式选择
+            const modeSelect = document.getElementById('mode-select');
+            const modeInfo = document.getElementById('mode-info');
+            const currentMode = document.getElementById('current-mode');
+
+            modeSelect.addEventListener('change', (e) => {
+                params.mode = e.target.value;
+                if (params.mode === 'physics') {
+                    modeInfo.innerHTML = '<strong>物理现实主义：</strong>遵循经典力学定律，粒子受重力影响自然下落，形成真实的抛物线轨迹。适合追求物理可信度的视觉效果。';
+                    currentMode.textContent = '物理现实主义';
+                    params.gravity = 0.15;
+                    params.drag = 0.98;
+                } else {
+                    modeInfo.innerHTML = '<strong>表现艺术自由：</strong>打破物理定律，粒子可以反抗重力向上漂浮，在空间中创造出梦幻的、超现实的视觉效果。空气阻力可能反转，时间感知扭曲。';
+                    currentMode.textContent = '表现艺术自由';
+                    params.gravity = -0.05;
+                    params.drag = 1.0;
+                }
+                document.getElementById('gravity-slider').value = params.gravity;
+                document.getElementById('gravity-value').textContent = params.gravity;
+                document.getElementById('drag-slider').value = params.drag;
+                document.getElementById('drag-value').textContent = params.drag;
+            });
+
+            // 色彩选择
+            document.getElementById('color-select').addEventListener('change', (e) => {
+                params.colorScheme = e.target.value;
+            });
+
+            // 滑块控制
+            const sliders = [
+                { id: 'count-slider', param: 'fireworkCount', display: 'count-value' },
+                { id: 'density-slider', param: 'particleDensity', display: 'density-value' },
+                { id: 'gravity-slider', param: 'gravity', display: 'gravity-value' },
+                { id: 'drag-slider', param: 'drag', display: 'drag-value' },
+                { id: 'trail-slider', param: 'trailFade', display: 'trail-value' },
+                { id: 'multi-slider', param: 'multiBurstProb', display: 'multi-value', transform: v => v / 100, displayTransform: v => v + '%' },
+                { id: 'force-slider', param: 'explosionForce', display: 'force-value' }
+            ];
+
+            sliders.forEach(({ id, param, display, transform, displayTransform }) => {
+                const slider = document.getElementById(id);
+                const displayEl = document.getElementById(display);
+
+                slider.addEventListener('input', (e) => {
+                    let value = parseFloat(e.target.value);
+                    params[param] = transform ? transform(value) : value;
+                    displayEl.textContent = displayTransform ? displayTransform(value) : value;
+                });
+            });
+
+            // 发射按钮
+            document.getElementById('launch-btn').addEventListener('click', launchFireworks);
+
+            // 清除按钮
+            document.getElementById('clear-btn').addEventListener('click', () => {
+                fireworks = [];
+                particles = [];
+                background(10, 10, 15);
+            });
+
+            // 更新种子显示
+            document.getElementById('seed-display').textContent = params.seed;
+
+            // 音效控制
+            const muteBtn = document.getElementById('mute-btn');
+            const volumeSlider = document.getElementById('volume-slider');
+
+            muteBtn.addEventListener('click', () => {
+                audioManager.init();  // 确保音频上下文已初始化
+                params.soundEnabled = !params.soundEnabled;
+                muteBtn.textContent = params.soundEnabled ? '🔊 开启音效' : '🔇 静音';
+            });
+
+            volumeSlider.addEventListener('input', (e) => {
+                const value = e.target.value / 100;
+                params.volume = value;
+                audioManager.setVolume(value);
+            });
+
+            // 切换控制面板
+            const toggleBtn = document.getElementById('toggle-controls');
+            const controls = document.getElementById('controls');
+            let controlsVisible = true;
+
+            toggleBtn.addEventListener('click', () => {
+                controlsVisible = !controlsVisible;
+                controls.classList.toggle('hidden', !controlsVisible);
+                toggleBtn.classList.toggle('shifted', controlsVisible);
+                toggleBtn.textContent = controlsVisible ? '⚙️' : '🎆';
+            });
+        }
+
+        function launchFireworks() {
+            // 更新种子
+            params.seed = Math.floor(random(10000, 99999));
+            setSeed(params.seed);
+            document.getElementById('seed-display').textContent = params.seed;
+
+            // 发射指定数量的烟花
+            for (let i = 0; i < params.fireworkCount; i++) {
+                setTimeout(() => {
+                    const x = random(width * 0.2, width * 0.8);
+                    const targetY = random(height * 0.2, height * 0.5);
+                    fireworks.push(new Firework(x, targetY));
+                }, i * 300);
+            }
+        }
+
+        function draw() {
+            // 轨迹衰减效果（通过半透明背景覆盖）
+            background(10, 10, 15, params.trailFade * 255);
+
+            // 更新和绘制所有烟花
+            for (let i = fireworks.length - 1; i >= 0; i--) {
+                fireworks[i].update();
+                fireworks[i].display();
+
+                if (fireworks[i].isDead()) {
+                    fireworks.splice(i, 1);
+                }
+            }
+
+            // 更新和绘制所有粒子
+            for (let i = particles.length - 1; i >= 0; i--) {
+                particles[i].update();
+                particles[i].display();
+
+                if (particles[i].isDead()) {
+                    particles.splice(i, 1);
+                }
+            }
+
+            // 更新统计信息
+            document.getElementById('particle-count').textContent = particles.length;
+            document.getElementById('firework-count').textContent = fireworks.length;
+
+            // 自动发射（如果粒子太少）
+            if (particles.length < 50 && fireworks.length === 0 && random() < 0.01) {
+                const x = random(width * 0.2, width * 0.8);
+                const targetY = random(height * 0.2, height * 0.5);
+                fireworks.push(new Firework(x, targetY));
+            }
+        }
+
+        function windowResized() {
+            resizeCanvas(windowWidth, windowHeight);
+            background(10, 10, 15);
+        }
+
+        // 点击画布发射单个烟花
+        function mousePressed() {
+            const controls = document.getElementById('controls');
+            const isControlsHidden = controls.classList.contains('hidden');
+
+            // 如果面板隐藏，任意位置可点击；如果面板显示，避开面板区域
+            if (isControlsHidden || mouseX > 360) {
+                fireworks.push(new Firework(mouseX, mouseY));
+            }
+        }
+    </script>
+</body>
+</html>
